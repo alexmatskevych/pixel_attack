@@ -192,7 +192,6 @@ def perturbator_3001(NeuralNet ,images_targets, pop_size=400, max_iterations=100
                              astype(int) % data.size()[-1]
             rgb = (rgb[random_numbers[:,0]] + f_param * (rgb[random_numbers[:,1]] + rgb[random_numbers[:,2]]))
 
-            # TODO: CLip in right interval with : if over max boundary--> minus max, if under min boundary--> plus max
             over0 = rgb[:, :, 0] > (1 - 0.485) / 0.229
             over1 = rgb[:, :, 1] > (1 - 0.456) / 0.224
             over2 = rgb[:, :, 2] > (1 - 0.406) / 0.225
@@ -207,7 +206,7 @@ def perturbator_3001(NeuralNet ,images_targets, pop_size=400, max_iterations=100
             rgb[:, :, 1][under1] += 1 / 0.224
             rgb[:, :, 2][under2] += 1 / 0.225
 
-            #test
+            #test, just so i know i didnt do anything wrong
             over0 = rgb[:, :, 0] > (1 - 0.485) / 0.229
             over1 = rgb[:, :, 1] > (1 - 0.456) / 0.224
             over2 = rgb[:, :, 2] > (1 - 0.406) / 0.225
@@ -248,7 +247,7 @@ def reproduction():
         alexnet.cuda()
 
     #if already saved
-    if os.path.exists("../reproduction_init.torch"):
+    if os.path.exists("../reproduction_init_cpu.torch"):
         print("path already exists,loading...")
         pert_samples, iterations, data_cropped= torch.load("../reproduction_init_cpu.torch")
 
@@ -266,11 +265,9 @@ def reproduction():
         torch.save((pert_samples,iterations,data_cropped),"../reproduction_init_cpu.torch")
 
 
-
-    accuracy_score, pred_right = accuracy(alexnet,data_cropped)
+    accuracy_score, pred_right = accuracy(alexnet.cpu(),data_cropped)
     torch.save(accuracy_score, "../reproduction_accuracy.torch")
-    torch.save(extract_stats(alexnet, data_cropped, pert_samples, pred_right), "../reproduction_stats.torch")
-
+    torch.save(extract_stats(alexnet.cpu(), data_cropped, pert_samples, pred_right), "../reproduction_stats.torch")
 
 
 def accuracy(NeuralNet,vals):
@@ -319,9 +316,9 @@ def extract_stats(NeuralNet ,vals,pert_samples,pred_right):
     # extract targets
     targets_orig = vals[1]
 
-    # use only data, which were predicted right in the first place
-    targets_orig = [targets_orig[i] for i in pred_right]
-    pert_samples = [pert_samples[i] for i in pred_right]
+    ## use only data, which were predicted right in the first place
+    #targets_orig = [targets_orig[i] for i in pred_right]
+    #pert_samples = [pert_samples[i] for i in pred_right]
 
     # computing scores of all perturbed image samples
     scores_of_pert_images = NeuralNet(torch.stack(pert_samples))
@@ -331,6 +328,7 @@ def extract_stats(NeuralNet ,vals,pert_samples,pred_right):
 
     # calculate which of the classes are bigger than the prediction score for the target class
     bigger_than_target_pert = scores_of_pert_images.detach().numpy() > np.matrix(target_scores_in_pert_pred.detach().numpy()).transpose()
+
 
     # calculate percentage of classes bigger than the target class score
     success_rate = np.sum(bigger_than_target_pert.any(1))/len(targets_orig)
@@ -342,7 +340,9 @@ def extract_stats(NeuralNet ,vals,pert_samples,pred_right):
 
     # calculate how many classes are bigger than target
     number_of_bigger_classes = np.sum(bigger_than_target_pert, axis=1)
-    print("number of more probable classes: ", number_of_bigger_classes)
+    #print("number of more probable classes: ", number_of_bigger_classes)
+
+    print("bigger_than.shape: ",bigger_than_target_pert.shape)
 
     return success_rate, confidence, number_of_bigger_classes
 
