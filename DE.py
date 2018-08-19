@@ -250,7 +250,7 @@ def reproduction():
     #if already saved
     if os.path.exists("../reproduction_init.torch"):
         print("path already exists,loading...")
-        pert_samples, iterations, data_cropped= torch.load("../reproduction_init.torch")
+        pert_samples, iterations, data_cropped= torch.load("../reproduction_init_cpu.torch")
 
     else:
         data_cropped = load_imagenet(600)
@@ -259,9 +259,12 @@ def reproduction():
         torch.save((pert_samples,iterations,data_cropped),"../reproduction_init_gpu.torch")
 
         output = []
+
         for i in pert_samples:
             output.append(i.cpu())
+        pert_samples=output
         torch.save((pert_samples,iterations,data_cropped),"../reproduction_init_cpu.torch")
+
 
 
     accuracy_score, pred_right = accuracy(alexnet,data_cropped)
