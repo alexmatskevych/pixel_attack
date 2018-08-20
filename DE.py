@@ -73,14 +73,17 @@ def load_imagenet(img_size=600,clear=False):
 
 
 def perturbator_3001(NeuralNet ,images_targets, pop_size=400, max_iterations=100, f_param=0.5, criterium="paper",
-                     pixel_number=1,cuda=False):
+                     pixel_number=1, cuda=False, print_every=1):
+
+    print("Running perturbator_3001...")
+    total_time=time()
 
     #assertions
     assert(f_param>=0 and f_param <= 2),"0<=F<=2 !"
     assert (criterium=="paper" or criterium=="over50" or criterium=="under0.1"), "No valid criterium! "
 
     # extract images and targets
-    images,targets=images_targets
+    images, targets=images_targets
     if cuda:
         images=torch.stack(images).cuda()
     else:
@@ -108,21 +111,6 @@ def perturbator_3001(NeuralNet ,images_targets, pop_size=400, max_iterations=100
                         (np.random.normal(0.5 / 0.224, 0.5 / 0.224, (pop_size, pixel_number, 1)) % 1 / 0.224) - (0.456 / 0.224),
                         (np.random.normal(0.5 / 0.225, 0.5 / 0.225, (pop_size, pixel_number, 1)) % 1 / 0.225) - (0.406 / 0.225)])[:, :, :, 0]\
             .swapaxes(0,1).swapaxes(1,2)
-
-        # TODO: CLip in right interval with : if over max boundary--> minus max, if under min boundary--> plus max
-        over0 = rgb[:, :, 0] > (1 - 0.485) / 0.229
-        over1 = rgb[:, :, 1] > (1 - 0.456) / 0.224
-        over2 = rgb[:, :, 2] > (1 - 0.406) / 0.225
-        under0 = rgb[:, :, 0] < - 0.485 / 0.229
-        under1 = rgb[:, :, 1] < - 0.456 / 0.224
-        under2 = rgb[:, :, 2] < - 0.406 / 0.225
-
-        assert(over0.any() == False and
-               over1.any() == False and
-               over2.any() == False and
-               under0.any() == False and
-               under1.any() == False and
-               under2.any() == False), "rgb values over boundary!"
 
         #initialize scores for comparison fathers-sons
         fitness_list = np.ones(pop_size)
@@ -159,6 +147,7 @@ def perturbator_3001(NeuralNet ,images_targets, pop_size=400, max_iterations=100
                     score = soft(NeuralNet(data_purb.unsqueeze(0)).squeeze())
 
                 true_score = score[target].cpu().detach().numpy()
+                max_score = score.argmax().cpu().detach().numpy()
 
                 #check if son is better than father
                 if true_score>fitness_list[i]:
@@ -168,11 +157,12 @@ def perturbator_3001(NeuralNet ,images_targets, pop_size=400, max_iterations=100
                 #if son is better than father, check break criteria
                 elif (criterium=="paper" and true_score < 0.05) or \
                         (criterium=="over50" and true_score > 0.5) or \
-                        (criterium=="under0.1" and true_score < 0.001):
+                        (criterium=="under0.1" and true_score < 0.001) or \
+                        (criterium=="smaller" and true_score != max_score):
 
                     found_candidate = True
                     list_iterations.append(iteration)
-                    list_pert_samples.append(data_purb)
+                    list_pert_samples.append(data_purb.cpu())
                     break
 
                 #if son is better than father but still not good enough
@@ -206,21 +196,6 @@ def perturbator_3001(NeuralNet ,images_targets, pop_size=400, max_iterations=100
             rgb[:, :, 1][under1] += 1 / 0.224
             rgb[:, :, 2][under2] += 1 / 0.225
 
-            #test, just so i know i didnt do anything wrong
-            over0 = rgb[:, :, 0] > (1 - 0.485) / 0.229
-            over1 = rgb[:, :, 1] > (1 - 0.456) / 0.224
-            over2 = rgb[:, :, 2] > (1 - 0.406) / 0.225
-            under0 = rgb[:, :, 0] < - 0.485 / 0.229
-            under1 = rgb[:, :, 1] < - 0.456 / 0.224
-            under2 = rgb[:, :, 2] < - 0.406 / 0.225
-
-            assert (over0.any() == False)
-            assert (over1.any() == False)
-            assert (over2.any() == False)
-            assert (under0.any() == False)
-            assert (under1.any() == False)
-            assert (under2.any() == False)
-
             iteration += 1
 
         if not found_candidate:
@@ -229,13 +204,21 @@ def perturbator_3001(NeuralNet ,images_targets, pop_size=400, max_iterations=100
 
         #we do not want more than image_number pictures
         sample_count += 1
-        print("image number {} with {} iterations in {} sec".format(sample_count,list_iterations[sample_count-1],time()-data_time))
+
+        if sample_count % print_every==0:
+            print("image number {} with {} iterations in {} sec".format(sample_count,list_iterations[sample_count-1],time()-data_time))
+
+            if print_every!=1:
+                print("Time elapsed: {} min".format((time()-total_time)/60))
 
     return list_pert_samples, list_iterations
 
 
-def reproduction():
+def reproduction(nr=1,print_every=50):
     """reproduction of the paper scores"""
+
+    print("reproduction...")
+
     cuda=False
     if torch.cuda.is_available():
         cuda=True
@@ -243,31 +226,46 @@ def reproduction():
 
     if cuda:
         print("Using Cuda")
-        #cuda4 = torch.device('cuda:4')
         alexnet.cuda()
 
-    #if already saved
-    if os.path.exists("../reproduction_init_cpu.torch"):
-        print("path already exists,loading...")
-        pert_samples, iterations, data_cropped= torch.load("../reproduction_init_cpu.torch")
+    if cuda:
+
+        if os.path.exists("/net/hci-storage02/userfolders/amatskev/pixel_attack/reproduction_init_{}.torch".format(nr)):
+            print("path already exists for nr , loading...".format(nr))
+            pert_samples, iterations, data_cropped = torch.load("/net/hci-storage02/userfolders/amatskev/pixel_attack/reproduction_init_{}.torch".format(nr))
+
+        else:
+            data_cropped = load_imagenet(600, True)
+            pert_samples, iterations = perturbator_3001(alexnet, data_cropped, 400, cuda=cuda, print_every=50)
+
+            print("saving...")
+            torch.save((pert_samples, iterations, data_cropped), "/net/hci-storage02/userfolders/amatskev/pixel_attack/reproduction_init_{}.torch".format(nr))
+
 
     else:
-        data_cropped = load_imagenet(600)
-        pert_samples, iterations = perturbator_3001(alexnet, data_cropped, 400, cuda=cuda)
 
-        torch.save((pert_samples,iterations,data_cropped),"../reproduction_init_gpu.torch")
+        if os.path.exists("../reproduction_init_{}.torch".format(nr)):
+            print("path already exists for nr , loading...".format(nr))
+            pert_samples, iterations, data_cropped= torch.load("../reproduction_init_{}.torch".format(nr))
 
-        output = []
+        else:
+            data_cropped = load_imagenet(600, True)
+            pert_samples, iterations = perturbator_3001(alexnet, data_cropped, 400, cuda=cuda)
 
-        for i in pert_samples:
-            output.append(i.cpu())
-        pert_samples=output
-        torch.save((pert_samples,iterations,data_cropped),"../reproduction_init_cpu.torch")
+            print("saving...")
+            torch.save((pert_samples,iterations,data_cropped),"../reproduction_init_{}.torch".format(nr))
 
 
-    accuracy_score, pred_right = accuracy(alexnet.cpu(),data_cropped)
-    torch.save(accuracy_score, "../reproduction_accuracy.torch")
-    torch.save(extract_stats(alexnet.cpu(), data_cropped, pert_samples, pred_right), "../reproduction_stats.torch")
+    #extract_stats_with_false(alexnet, data_cropped, pert_samples)
+    #accuracy_score, pred_right = accuracy(alexnet.cpu(),data_cropped)
+    #torch.save(accuracy_score, "../reproduction_accuracy.torch")
+    #torch.save(extract_stats(alexnet.cpu(), data_cropped, pert_samples, pred_right), "../reproduction_stats.torch")
+
+
+def reproduction_loop():
+
+    for i in np.arange(3):
+        reproduction(i,print_every=50)
 
 
 def accuracy(NeuralNet,vals):
@@ -277,14 +275,9 @@ def accuracy(NeuralNet,vals):
     soft=nn.Softmax(dim=0).cuda()
 
     #extract images and targets
-    samples_orig,targets_orig = vals
+    samples_orig, targets_orig = vals
 
-    #transform data
     data=torch.stack(samples_orig)
-    ## normalize the image for the network
-    #data[:,0] = (data[:,0] / 255. - 0.485) / 0.229
-    #data[:,1] = (data[:,1] / 255. - 0.456) / 0.224
-    #data[:,2] = (data[:,2] / 255. - 0.406) / 0.225
 
     #calculate scores
     if torch.cuda.is_available():
@@ -296,19 +289,12 @@ def accuracy(NeuralNet,vals):
     #calculate percentage of right predictions
     accuracy=np.sum(scores_of_orig_images.argmax(1).detach().numpy() == targets_orig)/len(targets_orig)
     right_preds = np.where(scores_of_orig_images.argmax(1).detach().numpy() == targets_orig)[0]
-    #wrong_preds = np.where(scores_of_orig_images.argmax(1).detach().numpy() != targets_orig)[0]
-
-    #probability_of_true_class = scores_of_orig_images[np.arange(len(targets_orig)), targets_orig]
-    #probability_of_true_class = probability_of_true_class[wrong_preds]
-
-    #max_probability = np.max(scores_of_orig_images.detach().numpy(), axis=0)
-    #max_probability = max_probability[wrong_preds]
 
     print("accuracy: ", accuracy)
-    #print(probability_of_true_class)
-    #print(max_probability)
-    #print(max_probability-probability_of_true_class.detach().numpy())
+
     return accuracy, right_preds
+
+
 
 def extract_stats(NeuralNet ,vals,pert_samples,pred_right):
     """extracts stats of the perturbed samples"""
@@ -316,9 +302,9 @@ def extract_stats(NeuralNet ,vals,pert_samples,pred_right):
     # extract targets
     targets_orig = vals[1]
 
-    ## use only data, which were predicted right in the first place
-    #targets_orig = [targets_orig[i] for i in pred_right]
-    #pert_samples = [pert_samples[i] for i in pred_right]
+    # use only data, which were predicted right in the first place
+    targets_orig = [targets_orig[i] for i in pred_right]
+    pert_samples = [pert_samples[i] for i in pred_right]
 
     # computing scores of all perturbed image samples
     scores_of_pert_images = NeuralNet(torch.stack(pert_samples))
@@ -346,46 +332,121 @@ def extract_stats(NeuralNet ,vals,pert_samples,pred_right):
 
     return success_rate, confidence, number_of_bigger_classes
 
+
+
+
+def extract_stats_with_false(NeuralNet ,vals,pert_samples):
+    """computing stats with success_rate: the predictions which do not match with original prediction
+    (including the false predicted in orig prediction)"""
+
+    print("Computing extract_stats_with_false...")
+    soft = nn.Softmax(dim=0).cuda()
+
+    # extract images and targets
+    samples_orig, targets_orig = vals
+
+    # transform data
+    data = torch.stack(samples_orig)
+    pert_data=torch.stack(pert_samples)
+    # calculate scores
+    if torch.cuda.is_available():
+        NeuralNet.cuda()
+        scores_of_orig_images = NeuralNet(data.cuda()).cpu()
+        scores_of_pert_images = NeuralNet(pert_data.cuda()).cpu()
+
+    else:
+        scores_of_orig_images = NeuralNet(data)
+        scores_of_pert_images = NeuralNet(pert_data)
+
+    max_scores_orig=scores_of_orig_images.argmax(1).detach().numpy()
+    max_scores_pert=scores_of_pert_images.argmax(1).detach().numpy()
+
+    accuracy = np.sum(max_scores_orig == targets_orig) / len(targets_orig)
+    print("Accuracy: ",accuracy)
+
+    diff_orig_pert = max_scores_orig != max_scores_pert
+
+    success_rate=np.sum(diff_orig_pert)/len(diff_orig_pert)
+    print("Success rate: ", success_rate)
+
+
+
 def optimize_population():
     """optimize population """
 
+    print("Optimizing population...")
+
+    cuda=False
+    if torch.cuda.is_available():
+        cuda=True
+
     _, alexnet, _, _, _, _ = load_all_NN()
 
-    if os.path.exists("../optimize_population_data.torch"):
-        data_cropped=torch.load("../optimize_population_data.torch")
-    else:
-        data_cropped = load_imagenet(10)
-        torch.save(data_cropped,"../optimize_population_data.torch")
+    if cuda:
+        print("Using Cuda")
+        alexnet.cuda()
 
-    for population_size in [5,10,50,100,200,300,400,500]:
+    data_cropped = load_imagenet(600)
 
-        print("population: ",population_size)
-        pert_samples, iterations = perturbator_3001(alexnet, data_cropped, population_size)
-        stats=extract_stats(alexnet, data_cropped, pert_samples)
+    acc, _ = accuracy(alexnet,data_cropped)
 
-        torch.save((pert_samples, iterations, stats), "../optimize_population_{}.torch".format(population_size))
+    #because we run whole 2 in one run, we want good imageset
+    while acc<0.50:
+        data_cropped = load_imagenet(600,True)
+        acc, _ = accuracy(alexnet, data_cropped)
+
+    for population_size in [100,200,300,400,500,600,700,800,900,1000]:
+
+        print("--------------------------------------------------------------")
+        print("POPULATION: ",population_size)
+
+        if os.path.exists("/net/hci-storage02/userfolders/amatskev/pixel_attack/optimize_population_{}.torch".format(population_size)):
+
+            pert_samples, iterations,data_cropped = torch.load("/net/hci-storage02/userfolders/amatskev/pixel_attack/optimize_population_{}.torch".format(population_size))
+
+        else:
+            pert_samples, iterations = perturbator_3001(alexnet, data_cropped, population_size,cuda=cuda, print_every=50)
+
+            print("saving...")
+            torch.save((pert_samples, iterations, data_cropped), "/net/hci-storage02/userfolders/amatskev/pixel_attack/optimize_population_{}.torch".format(population_size))
+
+        #stats=extract_stats(alexnet, data_cropped, pert_samples)
+
 
 def optimize_f_crit():
     """optimize f and crit """
 
+    print("Optimizing f and crit...")
+    cuda = False
+    if torch.cuda.is_available():
+        cuda = True
+
     _, alexnet, _, _, _, _ = load_all_NN()
 
-    if os.path.exists("../optimize_f_crit_data.torch"):
-        data_cropped=torch.load("../optimize_f_crit_data.torch")
-    else:
-        data_cropped = load_imagenet(5)
-        torch.save(data_cropped,"../optimize_f_crit_data.torch")
+    if cuda:
+        print("Using Cuda")
+        alexnet.cuda()
+
+    data_cropped = load_imagenet(600)
 
     for F in [0,0.5,1,1.5,2]:
 
-        for crit in ["paper","over50","under0.1"]:
+        for crit in ["paper","smaller"]:
 
             print("F: ",F,", crit: ",crit)
 
-            pert_samples, iterations = perturbator_3001(alexnet, data_cropped,5,f_param=F, criterium=crit)
-            stats=extract_stats(alexnet, data_cropped, pert_samples)
+            if os.path.exists(
+                    "/net/hci-storage02/userfolders/amatskev/pixel_attack/optimize_f_crit_F_{}_crit_{}.torch".format(F,crit)):
 
-            torch.save((pert_samples, iterations, stats), "../optimize_f_crit_F_{}_crit_{}.torch".format(F,crit))
+                pert_samples, iterations, data_cropped=torch.load("/net/hci-storage02/userfolders/amatskev/pixel_attack/optimize_f_crit_F_{}_crit_{}.torch".format(F,crit))
+
+            else:
+                pert_samples, iterations = perturbator_3001(alexnet, data_cropped,400,f_param=F, criterium=crit, cuda=cuda, print_every=50)
+
+                print("saving...")
+                torch.save((pert_samples, iterations, data_cropped), "/net/hci-storage02/userfolders/amatskev/pixel_attack/optimize_f_crit_F_{}_crit_{}.torch".format(F,crit))
+
+            #stats=extract_stats(alexnet, data_cropped, pert_samples)
 
 def NN_and_pixel():
     """optimize """
@@ -415,11 +476,11 @@ def NN_and_pixel():
 
 if __name__ ==  '__main__':
     #1
-    reproduction()
+    reproduction_loop()
 
     #2
-    #optimize_population()
-    #optimize_f_crit()
+    optimize_population()
+    optimize_f_crit()
 
     #3
     #NN_and_pixel()
