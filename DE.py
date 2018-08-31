@@ -113,7 +113,7 @@ def perturbator_3001(NeuralNet ,images_targets, pop_size=400, max_iterations=100
             .swapaxes(0, 1).swapaxes(1, 2)
 
         #initialize scores for comparison fathers-sons
-        fitness_list = np.ones(pop_size)
+        fitness_list = np.zeros(pop_size)
 
 
         # set iterator to zero
@@ -150,7 +150,7 @@ def perturbator_3001(NeuralNet ,images_targets, pop_size=400, max_iterations=100
                 max_score = score.argmax().cpu().detach().numpy()
 
                 #check if son is better than father
-                if true_score>fitness_list[i]:
+                if true_score < fitness_list[i]:
                     coords[i]=coords_fathers[i]
                     rgb[i]=rgb_fathers[i]
 
@@ -178,9 +178,9 @@ def perturbator_3001(NeuralNet ,images_targets, pop_size=400, max_iterations=100
 
             # DE update agents
             random_numbers=np.array([np.random.choice(range(pop_size), 3, replace=False) for i in range(pop_size)])
-            coords = (coords[random_numbers[:,0]] + f_param * (coords[random_numbers[:,1]] + coords[random_numbers[:,2]])).\
+            coords = (coords[random_numbers[:, 0]] + f_param * (coords[random_numbers[:, 1]] + coords[random_numbers[:, 2]])).\
                              astype(int) % data.size()[-1]
-            rgb = (rgb[random_numbers[:,0]] + f_param * (rgb[random_numbers[:,1]] + rgb[random_numbers[:,2]]))
+            rgb = (rgb[random_numbers[:, 0]] + f_param * (rgb[random_numbers[:, 1]] + rgb[random_numbers[:, 2]]))
 
             over0 = rgb[:, :, 0] > (1 - 0.485) / 0.229
             over1 = rgb[:, :, 1] > (1 - 0.456) / 0.224
@@ -269,8 +269,8 @@ def reproduction(nr=1,print_every=50):
 
 
 
-def reproduction_loop():
 
+def reproduction_loop():
     for i in np.arange(3):
         reproduction(i, print_every=50)
 
