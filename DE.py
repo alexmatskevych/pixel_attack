@@ -80,7 +80,7 @@ def perturbator_3001(NeuralNet ,images_targets, pop_size=400, max_iterations=100
 
     #assertions
     assert(f_param>=0 and f_param <= 2),"0<=F<=2 !"
-    assert (criterium=="paper" or criterium=="over50" or criterium=="under0.1"), "No valid criterium! "
+    assert (criterium=="paper" or criterium=="over50" or criterium=="under0.1" or criterium=="smaller"), "No valid criterium! "
 
     # extract images and targets
     images, targets=images_targets
@@ -110,7 +110,7 @@ def perturbator_3001(NeuralNet ,images_targets, pop_size=400, max_iterations=100
         rgb = np.array([(np.random.normal(0.5 / 0.229, 0.5 / 0.229, (pop_size, pixel_number, 1)) % 1 / 0.229) - (0.485 / 0.229),
                         (np.random.normal(0.5 / 0.224, 0.5 / 0.224, (pop_size, pixel_number, 1)) % 1 / 0.224) - (0.456 / 0.224),
                         (np.random.normal(0.5 / 0.225, 0.5 / 0.225, (pop_size, pixel_number, 1)) % 1 / 0.225) - (0.406 / 0.225)])[:, :, :, 0]\
-            .swapaxes(0,1).swapaxes(1,2)
+            .swapaxes(0, 1).swapaxes(1, 2)
 
         #initialize scores for comparison fathers-sons
         fitness_list = np.ones(pop_size)
@@ -255,17 +255,24 @@ def reproduction(nr=1,print_every=50):
             print("saving...")
             torch.save((pert_samples,iterations,data_cropped),"../reproduction_init_{}.torch".format(nr))
 
+    print("extracting stats!")
+    acc, pred_right = accuracy(alexnet, data_cropped)
+    torch.save((acc, pred_right),
+               "/net/hci-storage02/userfolders/amatskev/pixel_attack/only_stats/reproduction_acc_{}.torch".format(
+                   nr))
+    torch.save(extract_stats(alexnet, data_cropped, pert_samples, pred_right, True),
+               "/net/hci-storage02/userfolders/amatskev/pixel_attack/only_stats/reproduction_init_stats_only_true_{}.torch".format(nr))
+    torch.save(extract_stats(alexnet, data_cropped, pert_samples, pred_right, False),
+               "/net/hci-storage02/userfolders/amatskev/pixel_attack/only_stats/reproduction_init_stats_{}.torch".format(nr))
+    torch.save(extract_stats_with_false(alexnet, data_cropped, pert_samples),
+               "/net/hci-storage02/userfolders/amatskev/pixel_attack/only_stats/reproduction_init_stats_false_{}.torch".format(nr))
 
-    #extract_stats_with_false(alexnet, data_cropped, pert_samples)
-    #accuracy_score, pred_right = accuracy(alexnet.cpu(),data_cropped)
-    #torch.save(accuracy_score, "../reproduction_accuracy.torch")
-    #torch.save(extract_stats(alexnet.cpu(), data_cropped, pert_samples, pred_right), "../reproduction_stats.torch")
 
 
 def reproduction_loop():
 
     for i in np.arange(3):
-        reproduction(i,print_every=50)
+        reproduction(i, print_every=50)
 
 
 def accuracy(NeuralNet,vals):
@@ -296,18 +303,28 @@ def accuracy(NeuralNet,vals):
 
 
 
-def extract_stats(NeuralNet ,vals,pert_samples,pred_right):
+def extract_stats(NeuralNet ,vals,pert_samples,pred_right, look_at_true=True):
     """extracts stats of the perturbed samples"""
+
+    if not torch.cuda.is_available():
+        NeuralNet.cpu()
 
     # extract targets
     targets_orig = vals[1]
 
     # use only data, which were predicted right in the first place
-    targets_orig = [targets_orig[i] for i in pred_right]
-    pert_samples = [pert_samples[i] for i in pred_right]
+    if look_at_true:
+        targets_orig = [targets_orig[i] for i in pred_right]
+        pert_samples = [pert_samples[i].cpu() for i in pred_right]
+    else:
+        pert_samples = [sample.cpu() for sample in pert_samples]
 
     # computing scores of all perturbed image samples
-    scores_of_pert_images = NeuralNet(torch.stack(pert_samples))
+    if torch.cuda.is_available():
+        data = torch.stack(pert_samples)
+        scores_of_pert_images = NeuralNet(data.cuda()).cpu()
+    else:
+        scores_of_pert_images = NeuralNet(torch.stack(pert_samples))
 
     # scores of the true targets in perturbated predictions
     target_scores_in_pert_pred = scores_of_pert_images[np.arange(len(targets_orig)), targets_orig]
@@ -318,36 +335,35 @@ def extract_stats(NeuralNet ,vals,pert_samples,pred_right):
 
     # calculate percentage of classes bigger than the target class score
     success_rate = np.sum(bigger_than_target_pert.any(1))/len(targets_orig)
-    print("success rate:", success_rate)
 
     # calculate confidence (average probability of target classes)
     confidence = np.sum(np.max(scores_of_pert_images.detach().numpy(), axis=0))/len(target_scores_in_pert_pred)
-    print("confidence: ", confidence)
 
     # calculate how many classes are bigger than target
     number_of_bigger_classes = np.sum(bigger_than_target_pert, axis=1)
     #print("number of more probable classes: ", number_of_bigger_classes)
 
-    print("bigger_than.shape: ",bigger_than_target_pert.shape)
 
     return success_rate, confidence, number_of_bigger_classes
 
 
 
 
-def extract_stats_with_false(NeuralNet ,vals,pert_samples):
+def extract_stats_with_false(NeuralNet ,vals, pert_samples):
     """computing stats with success_rate: the predictions which do not match with original prediction
     (including the false predicted in orig prediction)"""
 
-    print("Computing extract_stats_with_false...")
-    soft = nn.Softmax(dim=0).cuda()
-
+    if not torch.cuda.is_available():
+        NeuralNet.cpu()
     # extract images and targets
     samples_orig, targets_orig = vals
+
+    pert_samples = [sample.cpu() for sample in pert_samples]
 
     # transform data
     data = torch.stack(samples_orig)
     pert_data=torch.stack(pert_samples)
+
     # calculate scores
     if torch.cuda.is_available():
         NeuralNet.cuda()
@@ -361,15 +377,22 @@ def extract_stats_with_false(NeuralNet ,vals,pert_samples):
     max_scores_orig=scores_of_orig_images.argmax(1).detach().numpy()
     max_scores_pert=scores_of_pert_images.argmax(1).detach().numpy()
 
+    confidence = np.sum(np.max(scores_of_pert_images.detach().numpy(), axis=0))/len(max_scores_pert)
+
     accuracy = np.sum(max_scores_orig == targets_orig) / len(targets_orig)
-    print("Accuracy: ",accuracy)
+
+    target_scores_in_pert_pred = scores_of_pert_images[np.arange(len(targets_orig)), targets_orig]
+    bigger_than_target_pert = scores_of_pert_images.detach().numpy() > np.matrix(target_scores_in_pert_pred.detach().numpy()).transpose()
+    number_of_bigger_classes = np.sum(bigger_than_target_pert, axis=1)
+
 
     diff_orig_pert = max_scores_orig != max_scores_pert
 
     success_rate=np.sum(diff_orig_pert)/len(diff_orig_pert)
-    print("Success rate: ", success_rate)
 
 
+
+    return success_rate, confidence, number_of_bigger_classes
 
 def optimize_population():
     """optimize population """
@@ -410,7 +433,20 @@ def optimize_population():
             print("saving...")
             torch.save((pert_samples, iterations, data_cropped), "/net/hci-storage02/userfolders/amatskev/pixel_attack/optimize_population_{}.torch".format(population_size))
 
-        #stats=extract_stats(alexnet, data_cropped, pert_samples)
+        print("extracting stats!")
+        acc, pred_right = accuracy(alexnet, data_cropped)
+        torch.save((acc, pred_right),
+                   "/net/hci-storage02/userfolders/amatskev/pixel_attack/only_stats/optimize_population_acc_{}.torch".format(
+                       population_size))
+        torch.save(extract_stats(alexnet, data_cropped, pert_samples, pred_right, True),
+                   "/net/hci-storage02/userfolders/amatskev/pixel_attack/only_stats/optimize_population_stats_only_true_{}.torch".format(
+                       population_size))
+        torch.save(extract_stats(alexnet, data_cropped, pert_samples, pred_right, False),
+                   "/net/hci-storage02/userfolders/amatskev/pixel_attack/only_stats/optimize_population_stats_{}.torch".format(
+                       population_size))
+        torch.save(extract_stats_with_false(alexnet, data_cropped, pert_samples),
+                   "/net/hci-storage02/userfolders/amatskev/pixel_attack/only_stats/optimize_population_stats_false_{}.torch".format(
+                       population_size))
 
 
 def optimize_f_crit():
@@ -441,12 +477,21 @@ def optimize_f_crit():
                 pert_samples, iterations, data_cropped=torch.load("/net/hci-storage02/userfolders/amatskev/pixel_attack/optimize_f_crit_F_{}_crit_{}.torch".format(F,crit))
 
             else:
-                pert_samples, iterations = perturbator_3001(alexnet, data_cropped,400,f_param=F, criterium=crit, cuda=cuda, print_every=50)
+                pert_samples, iterations = perturbator_3001(alexnet, data_cropped, 400, f_param=F, criterium=crit, cuda=cuda, print_every=50)
 
                 print("saving...")
                 torch.save((pert_samples, iterations, data_cropped), "/net/hci-storage02/userfolders/amatskev/pixel_attack/optimize_f_crit_F_{}_crit_{}.torch".format(F,crit))
 
-            #stats=extract_stats(alexnet, data_cropped, pert_samples)
+            print("extracting stats!")
+            acc, pred_right = accuracy(alexnet, data_cropped)
+            torch.save((acc, pred_right),
+                       "/net/hci-storage02/userfolders/amatskev/pixel_attack/only_stats/optimize_f_crit_acc_F_{}_crit_{}.torch".format(F,crit))
+            torch.save(extract_stats(alexnet, data_cropped, pert_samples, pred_right, True),
+                       "/net/hci-storage02/userfolders/amatskev/pixel_attack/only_stats/optimize_f_crit_stats_only_true_F_{}_crit_{}.torch".format(F,crit))
+            torch.save(extract_stats(alexnet, data_cropped, pert_samples, pred_right, False),
+                       "/net/hci-storage02/userfolders/amatskev/pixel_attack/only_stats/optimize_f_crit_stats_F_{}_crit_{}.torch".format(F,crit))
+            torch.save(extract_stats_with_false(alexnet, data_cropped, pert_samples),
+                       "/net/hci-storage02/userfolders/amatskev/pixel_attack/only_stats/optimize_f_crit_stats_false_F_{}_crit_{}.torch".format(F,crit))
 
 def NN_and_pixel():
     """optimize """

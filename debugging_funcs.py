@@ -121,7 +121,23 @@ def test2():
         print(targets[idx])
         print(targets[idx])
 
+def torch_to_numpy():
+    import torch
+    import numpy as np
+    import os
+    import pickle
+
+    folder_torch = "/HDD/advml/pixel_attack_stats/only_stats/"
+    folder_pickle = "/HDD/advml/pixel_attack_stats/pickle/"
+
+    things = os.listdir(folder_torch)
+
+    for file in things:
+
+        a = torch.load(folder_torch+file)
+
+        b = pickle.load(open(folder_pickle+file[:-6]+".pkl", "rb"))
 
 if __name__ == "__main__":
 
-    find_nice_samples(600)
+    torch_to_numpy()
