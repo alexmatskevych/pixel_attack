@@ -113,7 +113,7 @@ def perturbator_3001(NeuralNet ,images_targets, pop_size=400, max_iterations=100
             .swapaxes(0, 1).swapaxes(1, 2)
 
         #initialize scores for comparison fathers-sons
-        fitness_list = np.zeros(pop_size)
+        fitness_list = np.ones(pop_size)
 
 
         # set iterator to zero
@@ -147,10 +147,10 @@ def perturbator_3001(NeuralNet ,images_targets, pop_size=400, max_iterations=100
                     score = soft(NeuralNet(data_purb.unsqueeze(0)).squeeze())
 
                 true_score = score[target].cpu().detach().numpy()
-                max_score = score.argmax().cpu().detach().numpy()
+                max_score = score.max().cpu().detach().numpy()
 
                 #check if son is better than father
-                if true_score < fitness_list[i]:
+                if true_score > fitness_list[i]:
                     coords[i]=coords_fathers[i]
                     rgb[i]=rgb_fathers[i]
 
@@ -158,7 +158,7 @@ def perturbator_3001(NeuralNet ,images_targets, pop_size=400, max_iterations=100
                 elif (criterium=="paper" and true_score < 0.05) or \
                         (criterium=="over50" and true_score > 0.5) or \
                         (criterium=="under0.1" and true_score < 0.001) or \
-                        (criterium=="smaller" and true_score != max_score):
+                        (criterium=="smaller" and true_score < max_score):
 
                     found_candidate = True
                     list_iterations.append(iteration)

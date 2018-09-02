@@ -136,7 +136,7 @@ def torch_to_numpy():
 
         a = torch.load(folder_torch+file)
 
-        b = pickle.load(open(folder_pickle+file[:-6]+".pkl", "rb"))
+        pickle.dump(a, open(folder_pickle+file[:-6]+".pkl", "wb"))
 
 if __name__ == "__main__":
 
