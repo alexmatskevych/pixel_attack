@@ -465,11 +465,11 @@ def optimize_f_crit():
 
     data_cropped = load_imagenet(600)
 
-    for F in [0,0.5,1,1.5,2]:
+    for F in [0.5,0,1,1.5,2]:
 
-        for crit in ["paper","smaller"]:
+        for crit in ["smaller", "paper"]:
 
-            print("F: ",F,", crit: ",crit)
+            print("F: ",F,", crit: ", crit)
 
             if os.path.exists(
                     "/net/hci-storage02/userfolders/amatskev/pixel_attack/optimize_f_crit_F_{}_crit_{}.torch".format(F,crit)):
@@ -520,11 +520,11 @@ def NN_and_pixel():
             torch.save((pert_samples, iterations, stats), "../NN_and_pixel_NN_{}_pixel_{}.torch".format(NN_list[idx_nn],pixel_nr))
 
 if __name__ ==  '__main__':
-    #1
-    reproduction_loop()
+    ##1
+    #reproduction_loop()
 
-    #2
-    optimize_population()
+    ##2
+    #optimize_population()
     optimize_f_crit()
 
     #3
