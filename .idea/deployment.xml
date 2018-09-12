@@ -1,11 +1,32 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
-  <component name="PublishConfigData" autoUpload="Always" serverName="amatskev@hcigpu04.iwr.uni-heidelberg.de:22">
+  <component name="PublishConfigData" autoUpload="Always" serverName="amatskev@littleheron.iwr.uni-heidelberg.de:22">
     <serverData>
+      <paths name="amatskev@hcigpu03.iwr.uni-heidelberg.de:">
+        <serverdata>
+          <mappings>
+            <mapping deploy="/tmp/pycharm_project_724" local="$PROJECT_DIR$" />
+          </mappings>
+        </serverdata>
+      </paths>
       <paths name="amatskev@hcigpu04.iwr.uni-heidelberg.de:22">
         <serverdata>
           <mappings>
             <mapping deploy="/tmp/pycharm_project_714" local="$PROJECT_DIR$" />
+          </mappings>
+        </serverdata>
+      </paths>
+      <paths name="amatskev@hcigpu04.iwr.uni-heidelberg.de:22 (1)">
+        <serverdata>
+          <mappings>
+            <mapping deploy="/tmp/pycharm_project_10" local="$PROJECT_DIR$" />
+          </mappings>
+        </serverdata>
+      </paths>
+      <paths name="amatskev@littleheron.iwr.uni-heidelberg.de:22">
+        <serverdata>
+          <mappings>
+            <mapping deploy="/tmp/pycharm_project_141" local="$PROJECT_DIR$" />
           </mappings>
         </serverdata>
       </paths>

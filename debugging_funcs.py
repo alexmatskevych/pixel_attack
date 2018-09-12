@@ -15,7 +15,7 @@ def de_normalize(image):
 def show_img(image):
 
     import matplotlib.pyplot as plt
-    plt.imshow(image.squeeze().permute(1,2,0).round().int())
+    plt.imshow(image.squeeze().permute(1, 2, 0).round().int())
     plt.show()
 
 
@@ -121,6 +121,57 @@ def test2():
         print(targets[idx])
         print(targets[idx])
 
+
+def final_test():
+    import torch
+    import numpy as np
+
+    cuda=False
+    if torch.cuda.is_available():
+        cuda=True
+    _, alexnet, _, _, _, _ = load_all_NN()
+
+    if cuda:
+        print("Using Cuda")
+        alexnet.cuda()
+
+    pert_samples, iterations, data_cropped = torch.load(
+            "/net/hci-storage02/userfolders/amatskev/pixel_attack/reproduction_init_0.torch")
+    data_orig, targets_orig = data_cropped
+
+    pert_samples = [i.cpu() for i in pert_samples]
+
+    a = torch.stack(data_orig).cuda()
+    b = torch.stack(pert_samples).cuda()
+    a_res = alexnet(a).cpu()
+    b_res = alexnet(b).cpu()
+
+    a_max=torch.argmax(a_res, dim=1)
+    b_max=torch.argmax(b_res, dim=1)
+    sum_a=0
+    sum_b=0
+    for idx,i in enumerate(a_max):
+        if a_max[idx]==targets_orig[idx]:
+            sum_a+=1
+        if b_max[idx] == targets_orig[idx]:
+            sum_b += 1
+
+
+
+    print(sum_a)
+    print(sum_b)
+
+    for idx, i in enumerate(data_orig):
+        print(idx)
+        assert(len(np.unique(np.where((data_orig[idx]-pert_samples[idx].cpu()))[1]))==1)
+
+    print("success!")
+    #data = torch.stack(pert_samples)
+    #scores_of_pert_images = alexnet(data.cuda()).cpu()
+
+
+
+
 def torch_to_numpy():
     import torch
     import numpy as np
@@ -139,5 +190,4 @@ def torch_to_numpy():
         pickle.dump(a, open(folder_pickle+file[:-6]+".pkl", "wb"))
 
 if __name__ == "__main__":
-
-    torch_to_numpy()
+    final_test()

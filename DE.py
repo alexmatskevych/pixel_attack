@@ -8,7 +8,7 @@ import torch.nn.functional as F
 from time import time
 import os
 import sys
-
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 #debugging
 #from debugging_funcs import de_normalize, show_img, norm_show
 
@@ -72,7 +72,7 @@ def load_imagenet(img_size=600,clear=False):
     return val_images,val_targets
 
 
-def perturbator_3001(NeuralNet ,images_targets, pop_size=400, max_iterations=100, f_param=0.5, criterium="paper",
+def perturbator_3001(NeuralNet, images_targets, pop_size=400, max_iterations=100, f_param=0.5, criterium="paper",
                      pixel_number=1, cuda=False, print_every=1):
 
     print("Running perturbator_3001...")
@@ -83,7 +83,7 @@ def perturbator_3001(NeuralNet ,images_targets, pop_size=400, max_iterations=100
     assert (criterium=="paper" or criterium=="over50" or criterium=="under0.1" or criterium=="smaller"), "No valid criterium! "
 
     # extract images and targets
-    images, targets=images_targets
+    images, targets = images_targets
     if cuda:
         images=torch.stack(images).cuda()
     else:
@@ -96,7 +96,7 @@ def perturbator_3001(NeuralNet ,images_targets, pop_size=400, max_iterations=100
     soft=nn.Softmax(dim=0)
 
     sample_count = 0
-
+    cand_score=0
     for idx, data in enumerate(images):
 
         #pick target
@@ -126,7 +126,7 @@ def perturbator_3001(NeuralNet ,images_targets, pop_size=400, max_iterations=100
             for i in range(pop_size):
 
                 #make a copy so we do not alter the original image
-                data_purb=data.clone()
+                data_purb = data.clone()
 
                 #replace rgbs on the x and y positions (coords) in data_purb with the new rgbs (rgb)
                 if cuda:
@@ -163,6 +163,8 @@ def perturbator_3001(NeuralNet ,images_targets, pop_size=400, max_iterations=100
                     found_candidate = True
                     list_iterations.append(iteration)
                     list_pert_samples.append(data_purb.cpu())
+                    print("FOUND")
+                    cand_score+=1
                     break
 
                 #if son is better than father but still not good enough
@@ -210,7 +212,8 @@ def perturbator_3001(NeuralNet ,images_targets, pop_size=400, max_iterations=100
 
             if print_every!=1:
                 print("Time elapsed: {} min".format((time()-total_time)/60))
-
+    print("CAND SCORE: ",cand_score)
+    assert(1==1),"stop"
     return list_pert_samples, list_iterations
 
 
@@ -235,7 +238,7 @@ def reproduction(nr=1,print_every=50):
             pert_samples, iterations, data_cropped = torch.load("/net/hci-storage02/userfolders/amatskev/pixel_attack/reproduction_init_{}.torch".format(nr))
 
         else:
-            data_cropped = load_imagenet(600, True)
+            data_cropped = load_imagenet(600, False)
             pert_samples, iterations = perturbator_3001(alexnet, data_cropped, 400, cuda=cuda, print_every=50)
 
             print("saving...")
@@ -465,7 +468,7 @@ def optimize_f_crit():
 
     data_cropped = load_imagenet(600)
 
-    for F in [0.5,0,1,1.5,2]:
+    for F in [0.5, 0, 1, 1.5, 2]:
 
         for crit in ["smaller", "paper"]:
 
@@ -520,7 +523,7 @@ def NN_and_pixel():
             torch.save((pert_samples, iterations, stats), "../NN_and_pixel_NN_{}_pixel_{}.torch".format(NN_list[idx_nn],pixel_nr))
 
 if __name__ ==  '__main__':
-    ##1
+    #1
     #reproduction_loop()
 
     ##2
