@@ -2,10 +2,10 @@
 <project version="4">
   <component name="PublishConfigData" autoUpload="Always" serverName="amatskev@littleheron.iwr.uni-heidelberg.de:22">
     <serverData>
-      <paths name="amatskev@hcigpu03.iwr.uni-heidelberg.de:">
+      <paths name="amatskev@hcigpu03.iwr.uni-heidelberg.de:22">
         <serverdata>
           <mappings>
-            <mapping deploy="/tmp/pycharm_project_724" local="$PROJECT_DIR$" />
+            <mapping deploy="/tmp/pycharm_project_649" local="$PROJECT_DIR$" />
           </mappings>
         </serverdata>
       </paths>
@@ -26,7 +26,7 @@
       <paths name="amatskev@littleheron.iwr.uni-heidelberg.de:22">
         <serverdata>
           <mappings>
-            <mapping deploy="/tmp/pycharm_project_141" local="$PROJECT_DIR$" />
+            <mapping deploy="/tmp/pycharm_project_400" local="$PROJECT_DIR$" />
           </mappings>
         </serverdata>
       </paths>
@@ -34,6 +34,13 @@
         <serverdata>
           <mappings>
             <mapping deploy="/tmp/pycharm_project_499" local="$PROJECT_DIR$" />
+          </mappings>
+        </serverdata>
+      </paths>
+      <paths name="bigheron neuroseg">
+        <serverdata>
+          <mappings>
+            <mapping deploy="/tmp/pycharm_project_724" local="$PROJECT_DIR$" />
           </mappings>
         </serverdata>
       </paths>

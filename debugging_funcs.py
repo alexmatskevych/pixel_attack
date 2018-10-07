@@ -1,6 +1,15 @@
 import torch
-from DE import load_all_NN,load_imagenet,accuracy
-from time import time
+from DE import load_all_NN, load_imagenet, accuracy, extract_stats
+import time
+
+"""
+THESE ARE ONLY SOME FUNCTIONS FOR DEBUGGING
+"""
+
+
+def timing(time_before, name):
+    print("time for ", name, " :", time.time()- time_before)
+    return time.time()
 
 def de_normalize(image):
 
@@ -23,23 +32,32 @@ def norm_show(image):
 
     show_img(de_normalize(image))
 
+def test3():
+
+    import torch
+    import torchvision.models as models
+
+    pert_samples, iterations, data_cropped = torch.load("/HDD/advml/optimize_f_crit_F_0_crit_paper.torch")
+    data_cropped = torch.load("/HDD/advml/optimize_population_data.torch")
+    alexnet = models.squeezenet1_0(pretrained=True)
+
+    acc, pred_right = accuracy(alexnet,data_cropped)
+
+
+    a = extract_stats(alexnet, data_cropped, pert_samples, pred_right, True)
 
 def test():
     """test for cuda gpu programming"""
-    cuda4 = torch.device('cuda:4')
-    _, alexnet, _, _, _, _ = load_all_NN()
-    alexnet.cuda(cuda4)
+    _, _, _, _, _, inception = load_all_NN()
 
-    data_cropped = load_imagenet(600)
+    data_cropped = load_imagenet(5)
 
     images, targets = data_cropped
 
-    timeloop=time()
     for idx, data in enumerate(images):
-        a=alexnet(data.unsqueeze(0).cuda(cuda4)).squeeze()
+        a=inception(data.unsqueeze(0).cuda(cuda4)).squeeze()
 
 
-    print("Time for loop: ",time()-timeloop," seconds" )
 
 
     timecopy=time()
@@ -51,10 +69,11 @@ def test():
     print("Time for copy: ", time() - timecopy, " seconds")
     timebatch=time()
 
-    a=alexnet(tens)
 
     print("Time for  batch: ", time() - timebatch, " seconds")
     print("batchsize: ",tens.size())
+
+
 
 
 def cuda_to_cpu(file):
@@ -122,29 +141,82 @@ def test2():
         print(targets[idx])
 
 
+def right_targets(data_cropped, pert_samples):
+    print("extracting right targets...")
+
+    from copy import deepcopy
+    import numpy as np
+    print(len(pert_samples))
+    data, targets = data_cropped
+    true_targets=[]
+    true_images=[]
+    print("len(data): ", len(data))
+    for idx, img in enumerate(pert_samples):
+        found=False
+        if idx%20==0:
+            print("img {} of {}".format(idx, len(pert_samples)))
+        for idx_orig, img_orig in enumerate(data):
+            nonz = np.nonzero(img-img_orig)
+            if len(nonz)==3 or len(nonz)==0:
+                true_targets.append(deepcopy(targets[idx_orig]))
+                true_images.append(deepcopy(img_orig))
+                found=True
+                break
+        assert (found), "not found img !?"
+    print("finished")
+    return true_images, true_targets
+
 def final_test():
     import torch
     import numpy as np
+    import torchvision.models as models
 
     cuda=False
-    if torch.cuda.is_available():
-        cuda=True
-    _, alexnet, _, _, _, _ = load_all_NN()
+
+    alexnet = models.squeezenet1_0(pretrained=True)
 
     if cuda:
         print("Using Cuda")
         alexnet.cuda()
 
     pert_samples, iterations, data_cropped = torch.load(
-            "/net/hci-storage02/userfolders/amatskev/pixel_attack/reproduction_init_0.torch")
+            "/net/hci-storage02/userfolders/amatskev/pixel_attack/reproduction_init_0_bak.torch")
     data_orig, targets_orig = data_cropped
 
     pert_samples = [i.cpu() for i in pert_samples]
+    score_orig=0
+    score_pert=0
 
-    a = torch.stack(data_orig).cuda()
-    b = torch.stack(pert_samples).cuda()
+    a = torch.stack(data_orig)
+    b = torch.stack(pert_samples)
     a_res = alexnet(a).cpu()
     b_res = alexnet(b).cpu()
+
+    print("dimension sanity check")
+    print("data_orig[0].unsqueeze(0).size(): ", data_orig[0].unsqueeze(0).size())
+    print("pert_samples[0].unsqueeze(0).size(): ", pert_samples[0].unsqueeze(0).size())
+    print("alexnet(data_orig[0].unsqueeze(0)).squeeze().size(): ", alexnet(data_orig[0].unsqueeze(0)).squeeze().size())
+    print("alexnet(pert_samples[0].unsqueeze(0)).squeeze().size(): ", alexnet(pert_samples[0].unsqueeze(0)).squeeze().size())
+    print("torch.stack(data_orig).size(): ",a.size())
+    print("torch.stack(pert_samples).size(): ",b.size())
+
+    for idx, orig in enumerate(data_orig):
+        orig_res = torch.argmax(alexnet(orig.unsqueeze(0)).squeeze())
+        score_orig +=  (orig_res== targets_orig[idx]).detach().numpy()
+
+        pert_res = torch.argmax(alexnet(pert_samples[idx].unsqueeze(0)).squeeze())
+        score_pert +=  (pert_res == targets_orig[idx]).detach().numpy()
+        print("targets_orig[idx]: ",targets_orig[idx])
+        print("orig_res: ", orig_res)
+        print("(pert_res == targets_orig[idx]).detach.numpy(): ",(pert_res == targets_orig[idx]).detach().numpy())
+        print("pert_res: ", pert_res)
+        print("(pert_res == targets_orig[idx]).detach.numpy(): ",(pert_res == targets_orig[idx]).detach().numpy())
+
+
+
+    print("score_orig: ", score_orig)
+    print("score_pert: ", score_pert)
+
 
     a_max=torch.argmax(a_res, dim=1)
     b_max=torch.argmax(b_res, dim=1)
@@ -158,13 +230,19 @@ def final_test():
 
 
 
-    print(sum_a)
-    print(sum_b)
-
+    print("sum_a:", sum_a)
+    print("sum_b:", sum_b)
+    before=-1
+    same_score= 0
     for idx, i in enumerate(data_orig):
-        print(idx)
         assert(len(np.unique(np.where((data_orig[idx]-pert_samples[idx].cpu()))[1]))==1)
 
+        if before!=-1:
+            if np.unique(np.where((data_orig[idx] - pert_samples[idx].cpu()))[1]) != before:
+                same_score+=1
+
+        before = np.unique(np.where((data_orig[idx] - pert_samples[idx].cpu()))[1])
+    print("same_score: ", same_score)
     print("success!")
     #data = torch.stack(pert_samples)
     #scores_of_pert_images = alexnet(data.cuda()).cpu()
@@ -178,8 +256,8 @@ def torch_to_numpy():
     import os
     import pickle
 
-    folder_torch = "/HDD/advml/pixel_attack_stats/only_stats/"
-    folder_pickle = "/HDD/advml/pixel_attack_stats/pickle/"
+    folder_torch = "/HDD/advml/only_stats/"
+    folder_pickle = "/HDD/advml/only_stats_pickle/"
 
     things = os.listdir(folder_torch)
 
@@ -190,4 +268,13 @@ def torch_to_numpy():
         pickle.dump(a, open(folder_pickle+file[:-6]+".pkl", "wb"))
 
 if __name__ == "__main__":
-    final_test()
+    test()
+
+    pert_samples_smaller, iterations, data_cropped_smaller_true = torch.load("/HDD/advml/debug/NN_and_pixel_NN_resnet_pixel_1_390.torch")
+    data_cropped_smaller_true = torch.load("/HDD/advml/debug/NN_and_pixel_NN_resnet_pixel_1_390_right_targets.torch")
+
+    b = right_targets(data_cropped_smaller_true, pert_samples_smaller)
+    #torch_to_numpy()
+
+    #a = torch.load("/HDD/advml/testtest/NN_and_pixel_NN_alexnet_pixel_1.torch")
+    print("fin")
